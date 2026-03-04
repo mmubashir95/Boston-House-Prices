@@ -264,20 +264,20 @@ for col in num_cols:
     # Boxplot
     # --------------------------------------------------------
     # Used to detect outliers via IQR method
-    plt.figure()
-    sns.boxplot(x=df[col])
-    plt.title(f"Boxplot of {col}")
-    plt.show()
+    # plt.figure()
+    # sns.boxplot(x=df[col])
+    # plt.title(f"Boxplot of {col}")
+    # plt.show()
 
     # --------------------------------------------------------
     # Histogram + KDE
     # --------------------------------------------------------
     # Histogram shows distribution
     # KDE shows smooth probability density curve
-    plt.figure()
-    sns.histplot(df[col], kde=True)
-    plt.title(f"Distribution of {col}")
-    plt.show()
+    # plt.figure()
+    # sns.histplot(df[col], kde=True)
+    # plt.title(f"Distribution of {col}")
+    # plt.show()
 
     # --------------------------------------------------------
     # Scatter Plot vs Target (VERY IMPORTANT in regression)
@@ -288,21 +288,21 @@ for col in num_cols:
     # - Non-linearity
     # - Heteroscedasticity
     # - Outliers
-    plt.figure()
-    sns.scatterplot(x=df[col], y=df["MEDV"])
-    #sns.regplot(x=df["CRIM"], y=df["MEDV"], scatter_kws={"alpha":0.5})
-    plt.title(f"{col} vs MEDV")
-    plt.xlabel(col)
-    plt.ylabel("MEDV")
-    plt.show()
+    # plt.figure()
+    # sns.scatterplot(x=df[col], y=df["MEDV"])
+    # #sns.regplot(x=df["CRIM"], y=df["MEDV"], scatter_kws={"alpha":0.5})
+    # plt.title(f"{col} vs MEDV")
+    # plt.xlabel(col)
+    # plt.ylabel("MEDV")
+    # plt.show()
 
-    plt.figure()
-    #sns.scatterplot(x=df[col], y=df["MEDV"])
-    sns.regplot(x=df[col], y=df["MEDV"], scatter_kws={"alpha":0.5})
-    plt.title(f"{col} vs MEDV")
-    plt.xlabel(col)
-    plt.ylabel("MEDV")
-    plt.show()
+    # plt.figure()
+    # #sns.scatterplot(x=df[col], y=df["MEDV"])
+    # sns.regplot(x=df[col], y=df["MEDV"], scatter_kws={"alpha":0.5})
+    # plt.title(f"{col} vs MEDV")
+    # plt.xlabel(col)
+    # plt.ylabel("MEDV")
+    # plt.show()
 
     # --------------------------------------------------------
     # Correlation with Target
@@ -369,6 +369,106 @@ for col in num_cols:
 # ============================================================
 # ✅ END OF OUTLIER DETECTION SECTION
 # ============================================================
+
+
+# ============================================================
+# 📊 CORRELATION MATRIX ANALYSIS (Numerical vs Numerical)
+# ============================================================
+# This section computes and visualizes the correlation matrix
+# for all numerical features in the dataset.
+#
+# Purpose:
+# 1. Measure linear relationship between numerical variables
+# 2. Detect strong positive or negative correlations
+# 3. Identify potential multicollinearity issues
+# 4. Check correlation strength with the target variable
+#
+# Correlation Value Range:
+# +1   → Perfect positive linear relationship
+#  0   → No linear relationship
+# -1   → Perfect negative linear relationship
+#
+# What to Check:
+# - Any correlation > 0.8 or < -0.8? (Possible multicollinearity)
+# - Which features strongly correlate with target?
+# - Are some features redundant?
+#
+# IMPORTANT:
+# Correlation ≠ Causation
+# A strong correlation does NOT mean one variable causes the other.
+# ============================================================
+
+corr_matrix = df.corr(numeric_only=True)
+
+plt.figure(figsize=(14, 10))
+sns.heatmap(
+    corr_matrix,
+    cmap="coolwarm",
+    center=0,
+    square=True,
+    cbar_kws={"shrink": 0.8}
+)
+
+plt.title("Correlation Matrix", fontsize=16)
+plt.xticks(rotation=45)
+plt.yticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+# --------------------------------------------------------
+# TARGET COLUMN NAME
+# --------------------------------------------------------
+# Specify your target column (change if needed)
+target_col = "MEDV"
+
+
+# --------------------------------------------------------
+# SELECT NUMERIC FEATURES (EXCLUDING TARGET)
+# --------------------------------------------------------
+# Select all numeric columns (int64, float64)
+num_cols = df.select_dtypes(include=["int64", "float64"]).columns
+
+# Remove target column from numeric feature list
+# We don't want to compare target with itself
+num_cols = num_cols.drop(target_col)
+
+
+# --------------------------------------------------------
+# CORRELATION WITH TARGET
+# --------------------------------------------------------
+# Compute correlation of all numeric features with target
+# abs() is used because:
+#   - We care about strength, not direction (+/-)
+#   - Both strong positive and strong negative are useful
+
+corr_with_target = df.corr(numeric_only=True)[target_col].abs().sort_values(ascending=False)
+
+
+# --------------------------------------------------------
+# SELECT TOP 5 MOST CORRELATED FEATURES
+# --------------------------------------------------------
+# index[0] is the target itself (correlation = 1)
+# So we skip it using [1:6]
+# This selects top 5 features most correlated with target
+
+top_features = corr_with_target.index[1:6]
+
+
+# --------------------------------------------------------
+# BOX PLOT: TOP 5 FEATURES VS TARGET
+# --------------------------------------------------------
+# Purpose:
+# - Focus only on strongest predictors
+# - Clear visual comparison
+# - Helps understand which features drive prediction most
+
+for col in top_features:
+    plt.figure(figsize=(6, 4))
+    sns.boxplot(x=target_col, y=col, data=df)
+    plt.title(f"{col} vs {target_col}")
+    plt.tight_layout()
+    plt.show()
+
 
 
 # print("\nTarget Variable Summary Statistics:")
