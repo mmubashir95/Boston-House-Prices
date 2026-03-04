@@ -25,6 +25,19 @@ from sklearn.metrics import (
     roc_auc_score, f1_score, precision_score, recall_score
 )
 
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+
+
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.compose import TransformedTargetRegressor
+
 # ============================================================
 # 1️⃣ LOAD DATASET
 # ============================================================
@@ -469,6 +482,207 @@ for col in top_features:
     plt.tight_layout()
     plt.show()
 
+
+X = df.drop("MEDV", axis=1)
+y = df["MEDV"]
+
+# ------------------------------------------------------------
+# 2️⃣ Train Test Split (NO LEAKAGE)
+# ------------------------------------------------------------
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    random_state=42
+)
+
+# ------------------------------------------------------------
+# 3️⃣ Define Columns
+# ------------------------------------------------------------
+
+log_features = ["CRIM", "ZN", "DIS", "RAD"]
+numeric_features = X.columns.tolist()
+
+# remove log_features from numeric_features
+numeric_no_log = [col for col in numeric_features if col not in log_features]
+
+# ------------------------------------------------------------
+# 4️⃣ Create Transformers
+# ------------------------------------------------------------
+
+log_pipeline = Pipeline([
+    ("log", FunctionTransformer(np.log1p, feature_names_out="one-to-one")),
+    ("scaler", StandardScaler())
+])
+
+numeric_pipeline = Pipeline([
+    ("scaler", StandardScaler())
+])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("log", log_pipeline, log_features),
+        ("num", numeric_pipeline, numeric_no_log)
+    ],
+    remainder="drop"
+)
+
+# ------------------------------------------------------------
+# 5️⃣ Full Model Pipeline
+# ------------------------------------------------------------
+
+model = Pipeline([
+    ("preprocessor", preprocessor),
+    ("regressor", LinearRegression())
+])
+
+# ------------------------------------------------------------
+# 6️⃣ Train
+# ------------------------------------------------------------
+model.fit(X_train, y_train)
+
+# ------------------------------------------------------------
+# 7️⃣ Evaluate
+# ------------------------------------------------------------
+y_pred = model.predict(X_test)
+
+print("R2 Score:", r2_score(y_test, y_pred))
+print("RMSE:", np.sqrt(mean_squared_error(y_test, y_pred)))
+
+
+results = []
+
+# ============================================================
+# 1️⃣ RIDGE REGRESSION + CV
+# ============================================================
+
+ridge_model = Pipeline([
+    ("preprocessor", preprocessor),
+    ("regressor", Ridge(alpha=1.0))
+])
+
+ridge_model.fit(X_train, y_train)
+y_pred_ridge = ridge_model.predict(X_test)
+
+ridge_r2 = r2_score(y_test, y_pred_ridge)
+ridge_rmse = np.sqrt(mean_squared_error(y_test, y_pred_ridge))
+
+results.append(["Ridge", ridge_r2, ridge_rmse])
+
+
+# ============================================================
+# 2️⃣ RANDOM FOREST
+# ============================================================
+
+rf_model = Pipeline([
+    ("preprocessor", preprocessor),
+    ("regressor", RandomForestRegressor(
+        n_estimators=300,
+        random_state=42,
+    ))
+])
+
+rf_model.fit(X_train, y_train)
+y_pred_rf = rf_model.predict(X_test)
+
+rf_r2 = r2_score(y_test, y_pred_rf)
+rf_rmse = np.sqrt(mean_squared_error(y_test, y_pred_rf))
+
+results.append(["RandomForest", rf_r2, rf_rmse])
+
+
+# ============================================================
+# 3️⃣ LINEAR REGRESSION WITH LOG-TARGET
+# ============================================================
+
+log_target_model = TransformedTargetRegressor(
+    regressor=Pipeline([
+        ("preprocessor", preprocessor),
+        ("regressor", LinearRegression())
+    ]),
+    func=np.log1p,
+    inverse_func=np.expm1
+)
+
+log_target_model.fit(X_train, y_train)
+y_pred_log = log_target_model.predict(X_test)
+
+log_r2 = r2_score(y_test, y_pred_log)
+log_rmse = np.sqrt(mean_squared_error(y_test, y_pred_log))
+
+results.append(["Linear + LogTarget", log_r2, log_rmse])
+
+
+# ============================================================
+# 📊 MODEL COMPARISON TABLE
+# ============================================================
+
+results_df = pd.DataFrame(results, columns=["Model", "R2", "RMSE"])
+print("\nModel Comparison:")
+print(results_df.sort_values(by="R2", ascending=False))
+
+# -----------------------
+# RANDOM FOREST
+# -----------------------
+
+# Train predictions
+y_train_pred_rf = rf_model.predict(X_train)
+
+# Test predictions
+y_test_pred_rf = rf_model.predict(X_test)
+
+# Train metrics
+rf_train_r2 = r2_score(y_train, y_train_pred_rf)
+rf_train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred_rf))
+
+# Test metrics
+rf_test_r2 = r2_score(y_test, y_test_pred_rf)
+rf_test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred_rf))
+
+print("\nRandom Forest Performance:")
+print("Train R2 :", rf_train_r2)
+print("Train RMSE:", rf_train_rmse)
+print("Test  R2 :", rf_test_r2)
+print("Test  RMSE:", rf_test_rmse)
+
+def print_train_test_metrics(model, X_train, y_train, X_test, y_test, name="Model"):
+    """
+    Print Train/Test R2 and RMSE for any regression pipeline/model.
+    """
+    y_train_pred = model.predict(X_train)
+    y_test_pred  = model.predict(X_test)
+
+    train_r2 = r2_score(y_train, y_train_pred)
+    test_r2  = r2_score(y_test, y_test_pred)
+
+    train_rmse = np.sqrt(mean_squared_error(y_train, y_train_pred))
+    test_rmse  = np.sqrt(mean_squared_error(y_test, y_test_pred))
+
+    print(f"\n{name} Performance:")
+    print("Train R2  :", train_r2)
+    print("Train RMSE:", train_rmse)
+    print("Test  R2  :", test_r2)
+    print("Test  RMSE:", test_rmse)
+
+
+# -----------------------
+# RIDGE (Train vs Test)
+# -----------------------
+print_train_test_metrics(
+    ridge_model,
+    X_train, y_train,
+    X_test, y_test,
+    name="Ridge"
+)
+
+# -----------------------
+# LINEAR + LOG TARGET (Train vs Test)
+# -----------------------
+print_train_test_metrics(
+    log_target_model,
+    X_train, y_train,
+    X_test, y_test,
+    name="Linear + LogTarget"
+)
 
 
 # print("\nTarget Variable Summary Statistics:")
